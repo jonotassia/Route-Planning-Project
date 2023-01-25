@@ -40,11 +40,13 @@ void RoutePlanner::AddNeighbors(RouteModel::Node *current_node) {
 	current_node->FindNeighbors();
   
   	for (RouteModel::Node *neighbor:current_node->neighbors) {
-    	neighbor->parent = current_node;
-      	neighbor->h_value = this->CalculateHValue(neighbor);
-      	neighbor->g_value = current_node->distance(*neighbor);
-      	neighbor->visited = true;
-      	this->open_list.push_back(neighbor);
+    	if (neighbor->visited == false) {
+            neighbor->parent = current_node;
+            neighbor->h_value = this->CalculateHValue(neighbor);
+            neighbor->g_value = current_node->g_value + current_node->distance(*neighbor);
+            neighbor->visited = true;
+            this->open_list.push_back(neighbor);
+        }
     }
 }
 
@@ -62,12 +64,7 @@ RouteModel::Node *RoutePlanner::NextNode() {
             float f_node1 = node1->g_value + node1->h_value;
             float f_node2 = node2->g_value + node2->h_value;
 
-            if (f_node1 > f_node2) {
-                return true;
-            }
-            else {
-                return false;
-            }
+            return f_node1 > f_node2;
         }
         );
     
@@ -93,11 +90,14 @@ std::vector<RouteModel::Node> RoutePlanner::ConstructFinalPath(RouteModel::Node 
     RouteModel::Node *node = current_node;
 
     // Update path with chain of parents.
-    while (node->parent) {
+    while (node->parent != nullptr) {
         path_found.insert(path_found.begin(), *node);
         distance += node->distance(*node->parent);
         node = node->parent;
     }
+  
+  	// Add start node
+   	path_found.insert(path_found.begin(), *node);
 
     distance *= m_Model.MetricScale(); // Multiply the distance by the scale of the map to get meters.
     return path_found;
@@ -114,15 +114,24 @@ std::vector<RouteModel::Node> RoutePlanner::ConstructFinalPath(RouteModel::Node 
 
 void RoutePlanner::AStarSearch() {
     RouteModel::Node *current_node = nullptr;
+  
+  	this->start_node->visited = true;
 
     // Get start list
     current_node = this->start_node;
+  	this->AddNeighbors(current_node);
+
     // Continue through each iteration of open list until solution is found.
-    while (current_node != this->end_node) {
-        this->AddNeighbors(current_node);
+    while (this->open_list.size() > 0) {
         current_node = this->NextNode();
+
+        if (current_node == this->end_node) {
+            this->m_Model.path = this->ConstructFinalPath(current_node);
+          	return;
+        }
+      
+      	this->AddNeighbors(current_node);
     }
-
-    this->m_Model.path = this->ConstructFinalPath(current_node);
-
+  
+  	std::cout << "No solution found.";
 }
